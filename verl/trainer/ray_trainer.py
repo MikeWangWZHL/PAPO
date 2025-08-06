@@ -501,7 +501,14 @@ class RayPPOTrainer:
         if self.config.algorithm.contrastive_type == "augmented":
             augmented_images = []
             for img in original_images_pil:
-                aug_img = random_patch_blackening(img, **aug_config)
+                if isinstance(img, dict) and 'bytes' in img:
+                        from io import BytesIO
+                        img_bytes = img['bytes']
+                        stream = BytesIO(img_bytes)
+                        pil_img = Image.open(stream) 
+                        aug_img = random_patch_blackening(pil_img, **aug_config)
+                else:
+                    aug_img = random_patch_blackening(img, **aug_config)
                 augmented_images.append(aug_img)
             return augmented_images
         else:
