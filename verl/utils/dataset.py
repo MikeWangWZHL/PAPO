@@ -17,7 +17,7 @@ import os
 from collections import defaultdict
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple, Union
-
+from io import BytesIO
 import torch
 import numpy as np
 import pandas as pd
@@ -30,28 +30,98 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, ProcessorMixin
 from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
-
+from ..models.processors.internvl3_processor import InternVLProcessor
 from ..models.transformers.qwen2_vl import get_rope_index
 from . import torch_functional as VF
 
+def concat_pad_data_collator(features, max_item_length=None, pad_id=0):
+    # adapted from : https://github.com/OpenGVLab/InternVL/blob/51ac0b1daf0589c00c760681470006768b396290/internvl_chat/internvl/patch/pad_data_collator.py#L13
+
+    IGNORE_INDEX =-100
+    batch_lens = [feat['input_ids'].shape for feat in features]
+    max_item_length = max_item_length or max(batch_lens)[0]
+    for idx in range(len(features)):
+        feat = features[idx]
+        temp_input_ids = torch.LongTensor([pad_id] * max_item_length)
+        temp_input_ids[:feat['input_ids'].shape[0]] = feat['input_ids']
+        feat['input_ids'] = temp_input_ids
+        temp_labels = torch.LongTensor([IGNORE_INDEX] * max_item_length)
+        temp_labels[:feat['labels'].shape[0]] = feat['labels']
+        feat['labels'] = temp_labels
+        feat['attention_mask'] = feat['input_ids'].ne(pad_id)
+
+        if 'position_ids' in feat:
+            temp_position_ids = torch.LongTensor([pad_id] * max_item_length)
+            temp_position_ids[:feat['position_ids'].shape[0]] = feat['position_ids']
+            feat['position_ids'] = temp_position_ids
+
+        if 'loss_weight' in feat:
+            temp_loss_weight = torch.FloatTensor([pad_id] * max_item_length)
+            temp_loss_weight[:feat['loss_weight'].shape[0]] = feat['loss_weight']
+            feat['loss_weight'] = temp_loss_weight
+
+        tensors = defaultdict(list)
+        non_tensors = defaultdict(list)
+        for feature in features:
+            for key, value in feature.items():
+                if isinstance(value, torch.Tensor):
+                    tensors[key].append(value)
+                else:
+                    non_tensors[key].append(value)
+
+        for key, value in tensors.items():
+            tensors[key] = torch.stack(value, dim=0)
+
+        for key, value in non_tensors.items():
+            non_tensors[key] = np.array(value, dtype=object)
+
+        return {**tensors, **non_tensors} # is this padding causig the issue? Why the exclaimation points?
+
+def flatten_content(content):
+    """
+    Manually flattens content, so that it can be a string.
+    Args:
+        content: the content part of the message/conversation. In the form of something like this:
+        "content": [
+                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Please describe this image in detail."},
+        ],
+    """
+    if isinstance(content, list):
+        parts = []
+        for c in content:
+            if c['type'] == 'text':
+                parts.append(c['text'])
+            elif c['type'] == 'image':
+                parts.append("<image>") 
+            elif c['type'] == 'tool':
+                parts.append("<itool>")
+            elif c['type'] =='tools':
+                parts.append("<tools>")
+        return "\n".join(parts)
+    return content
+
 
 def collate_fn(features: List[Dict[str, Any]]) -> Dict[str, Any]:
-    tensors = defaultdict(list)
-    non_tensors = defaultdict(list)
-    for feature in features:
-        for key, value in feature.items():
-            if isinstance(value, torch.Tensor):
-                tensors[key].append(value)
-            else:
-                non_tensors[key].append(value)
+    try:
+        tensors = defaultdict(list)
+        non_tensors = defaultdict(list)
+        for feature in features:
+            for key, value in feature.items():
+                if isinstance(value, torch.Tensor):
+                    tensors[key].append(value)
+                else:
+                    non_tensors[key].append(value)
 
-    for key, value in tensors.items():
-        tensors[key] = torch.stack(value, dim=0)
+        for key, value in tensors.items():
+            tensors[key] = torch.stack(value, dim=0)
 
-    for key, value in non_tensors.items():
-        non_tensors[key] = np.array(value, dtype=object)
+        for key, value in non_tensors.items():
+            non_tensors[key] = np.array(value, dtype=object)
 
-    return {**tensors, **non_tensors}
+        return {**tensors, **non_tensors}
+    except:
+        return concat_pad_data_collator(features)
 
 
 def process_image(
@@ -280,7 +350,8 @@ class RLHFDataset(Dataset):
 
                 if content:
                     content_list.append({"type": "text", "text": content})
-
+            if isinstance(self.processor, InternVLProcessor):
+                content_list = flatten_content(content_list)
             return [{"role": "user", "content": content_list}]
         elif self.video_key in example:
             content_list = []
@@ -290,9 +361,12 @@ class RLHFDataset(Dataset):
 
                 if content:
                     content_list.append({"type": "text", "text": content})
-
+            if isinstance(self.processor, InternVLProcessor):
+                content_list = flatten_content(content_list)
             return [{"role": "user", "content": content_list}]
         else:
+            if isinstance(self.processor, InternVLProcessor):
+                content_list = flatten_content(content_list)
             return [{"role": "user", "content": prompt_str}]
 
     def _filter_overlong_prompts(self, example: Dict[str, Any]) -> bool:
@@ -300,7 +374,7 @@ class RLHFDataset(Dataset):
         if self.image_key in example:
             prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
             images = example[self.image_key]
-            if self.image_dir is not None and len(images) != 0 and isinstance(images[0], str):  # image paths
+            if self.image_dir is not None and len(images) != 0 and isinstance(images[0], str):  # image paths. Maybe the strs I was getting was image paths
                 images = [os.path.join(self.image_dir, image) for image in images]
 
             processed_images = [] if len(images) != 0 else None  # text-only data
@@ -347,7 +421,15 @@ class RLHFDataset(Dataset):
             model_inputs = self.processor(processed_images, [prompt], add_special_tokens=False, return_tensors="pt")
             input_ids = model_inputs.pop("input_ids")[0]
             attention_mask = model_inputs.pop("attention_mask")[0]
-            example["multi_modal_data"] = {"images": images}
+            # convert images to PIL
+            pil_images = []
+            for img in images:
+                if isinstance(img, dict) and 'bytes' in img:
+                    img_bytes = img['bytes']
+                    stream = BytesIO(img_bytes)
+                    pil_img = Image.open(stream) 
+                    pil_images.append(pil_img)
+            example["multi_modal_data"] = {"images": pil_images} # we expect pil images downstream
             # example["multi_modal_inputs"] = dict(model_inputs)
 
             # if aug image is provided in the data
