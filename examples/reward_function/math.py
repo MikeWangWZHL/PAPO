@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import Dict, List
+from typing import Any
 
 from mathruler.grader import extract_boxed_content, grade_answer
 
