@@ -29,12 +29,15 @@ def accuracy_reward(predict: str, ground_truth: str) -> float:
     return 1.0 if grade_answer(answer, ground_truth) else 0.0
 
 
-def compute_score(predicts: List[str], ground_truths: List[str], format_weight: float = 0.1) -> List[Dict[str, float]]:
+def compute_score(reward_inputs: list[dict[str, Any]], format_weight: float = 0.1) -> list[dict[str, float]]:
+    if not isinstance(reward_inputs, list):
+        raise ValueError("Please use `reward_type=batch` for math reward function.")
+
     scores = []
-    for predict, ground_truth in zip(predicts, ground_truths):
-        predict = re.sub(r"\s*(<|>|/)\s*", r"\1", predict)  # handle qwen2.5vl-32b format
-        format_score = format_reward(predict)
-        accuracy_score = accuracy_reward(predict, ground_truth)
+    for reward_input in reward_inputs:
+        response = re.sub(r"\s*(<|>|/)\s*", r"\1", reward_input["response"])  # handle qwen2.5vl-32b format
+        format_score = format_reward(response)
+        accuracy_score = accuracy_reward(response, reward_input["ground_truth"])
         scores.append(
             {
                 "overall": (1 - format_weight) * accuracy_score + format_weight * format_score,
