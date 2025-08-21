@@ -73,8 +73,10 @@ We adapt multiple multimodel reasoning benchmarks to construct our training and 
 - Validation (optional): We use the testset from [MMK12](https://huggingface.co/datasets/FanqingM/MMK12) for validation during training. **Note that this is solely for monitoring, we do not pick checkpoints based on this.** The processed dataset can be found [PAPOGalaxy/PAPO_MMK12_test](https://huggingface.co/datasets/PAPOGalaxy/PAPO_MMK12_test).
 
 ### **Evaluation Data**
-We adapted 8 different multimodal reasoning benchmarks to evaluate **PAPO**, which are further identify two groups, including `General Multimodal Reasoning` and `Vision-Dependent Multimodal Reasoning`:
-- **General Reasoning**
+We adapted 8 different multimodal reasoning benchmarks to evaluate **PAPO**, which are further identify two groups, including `General Multimodal Reasoning` and `Vision-Dependent Multimodal Reasoning`.
+All evaluation benchmarks can be found in https://huggingface.co/datasets/PAPO-Galaxy/PAPO_eval.
+For MathVista and MathVerse, we filter out instances with free-form answers to ensure verifiable evaluation and to avoid relying on LLM-as-a-judge.
+<!-- - **General Reasoning**
     - `hiyouga/geometry3k`: [Hugging Face Dataset](https://huggingface.co/datasets/hiyouga/geometry3k), [Data Source](https://github.com/lupantech/InterGPS)
     - `AI4Math/MathVista`: [Hugging Face Dataset](https://huggingface.co/datasets/AI4Math/MathVista)
     - `We-Math/We-Math`: [Hugging Face Dataset](https://huggingface.co/datasets/We-Math/We-Math)
@@ -84,7 +86,7 @@ We adapted 8 different multimodal reasoning benchmarks to evaluate **PAPO**, whi
     - `lscpku/LogicVista`: [Hugging Face Dataset](https://huggingface.co/datasets/lscpku/LogicVista)
     - `BUAADreamer/clevr_count_70k`: [Hugging Face Dataset](https://huggingface.co/datasets/BUAADreamer/clevr_count_70k)
     - `MMMU/MMMU_Pro`: [Hugging Face Dataset](https://huggingface.co/datasets/MMMU/MMMU_Pro)
-    - `MathVerse_V` (vision-dependent subset): Adapted from [AI4Math/MathVerse](https://huggingface.co/datasets/AI4Math/MathVerse)
+    - `MathVerse_V` (vision-dependent subset): Adapted from [AI4Math/MathVerse](https://huggingface.co/datasets/AI4Math/MathVerse) -->
 
 All results in the paper are average accurarcy @ 8 (repeating 8 times), with a temperature set to 1.0.
 
@@ -183,6 +185,7 @@ bash examples/papo_dapo/qwen2_5_vl_7b_dapo_papo.sh
 A collection of 7B/3B pretrained checkpoints on ViRL39K can be downloaded from [here](https://huggingface.co/collections/PAPOGalaxy/papo-qwen-686d92dd3d43b1ce698f851a). The checkpoints follows Qwen2.5-VL Huggingface format, which can be inferenced as drop-in replacement to https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct. 
 - PAPO-GRPO model collection: [PAPO-G](https://huggingface.co/collections/PAPOGalaxy/papo-g-688fd55ed6b49f343114ed6e)
 - PAPO-DAPO model collection: [PAPO-D](https://huggingface.co/collections/PAPOGalaxy/papo-d-688fd5917f3a2ffb715adcca)
+All checkpoints are corresponding to the last step.
 
 ### **Performance Evaluation**
 
