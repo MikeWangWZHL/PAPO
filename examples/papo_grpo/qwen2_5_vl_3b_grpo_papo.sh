@@ -25,7 +25,7 @@ VAL_FILE="PAPOGalaxy/PAPO_MMK12_test"
 FORMAT_PROMPT="examples/format_prompt/math_perception.jinja"
 REWARD_FUNCTION="examples/reward_function/math.py:compute_score"
 
-KL_PRCP_COEF=0.01
+KL_PRCP_COEF=0.02
 
 CUDA_VISIBLE_DEVICES=${CUDA_IDS} python3 -m verl.trainer.main \
     config=${CONGI_FILE} \

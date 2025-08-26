@@ -25,7 +25,13 @@ VAL_FILE="PAPOGalaxy/PAPO_MMK12_test"
 FORMAT_PROMPT="examples/format_prompt/math_perception.jinja"
 REWARD_FUNCTION="examples/reward_function/math.py:compute_score"
 
-KL_PRCP_COEF=0.01
+KL_PRCP_COEF=0.02
+
+## Double Entropy Loss
+USE_AUG_ENTROPY_LOSS=true
+AUG_ENTROPY_LOSS_COEF=0.05
+USE_ORI_ENTROPY_LOSS=true
+ORI_ENTROPY_LOSS_COEF=0.05
 
 CUDA_VISIBLE_DEVICES=${CUDA_IDS} python3 -m verl.trainer.main \
     config=${CONGI_FILE} \
@@ -41,4 +47,8 @@ CUDA_VISIBLE_DEVICES=${CUDA_IDS} python3 -m verl.trainer.main \
     trainer.total_epochs=${TOTAL_EPOCHES} \
     worker.reward.reward_function=${REWARD_FUNCTION} \
     data.max_prompt_length=${MAX_PROMPT_LENGTH} \
-    algorithm.kl_prcp_coef=${KL_PRCP_COEF}
+    algorithm.kl_prcp_coef=${KL_PRCP_COEF} \
+    algorithm.use_aug_entropy_loss=${USE_AUG_ENTROPY_LOSS} \
+    algorithm.aug_entropy_loss_coef=${AUG_ENTROPY_LOSS_COEF} \
+    algorithm.use_ori_entropy_loss=${USE_ORI_ENTROPY_LOSS} \
+    algorithm.ori_entropy_loss_coef=${ORI_ENTROPY_LOSS_COEF}

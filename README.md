@@ -136,7 +136,7 @@ cd PAPO
 bash examples/papo_dapo/qwen2_5_vl_7b_dapo.sh
 ```
 
-#### **PAPO-G (γ = 0.01)**
+#### **PAPO-G (Config for Table 1 Results)**
 ```bash
 # 3B model
 cd PAPO
@@ -147,18 +147,18 @@ cd PAPO
 bash examples/papo_grpo/qwen2_5_vl_7b_grpo_papo.sh
 ```
 
-#### **PAPO-G + High γ (γ = 0.02)**
+#### **PAPO-D (Config for Table 1 Results)**
 ```bash
 # 3B model
 cd PAPO
-bash examples/papo_grpo/qwen2_5_vl_3b_grpo_papo_high.sh
+bash examples/papo_dapo/qwen2_5_vl_3b_dapo_papo.sh
 
 # 7B model
 cd PAPO
-bash examples/papo_grpo/qwen2_5_vl_7b_grpo_papo_high.sh
+bash examples/papo_dapo/qwen2_5_vl_7b_dapo_papo.sh
 ```
 
-#### **PAPO-G + No Reference KL**
+#### **PAPO-G + No Reference KL (Config for Table 7 Results)**
 ```bash
 # 3B model (with double entropy loss)
 cd PAPO
@@ -169,16 +169,7 @@ cd PAPO
 bash examples/papo_grpo/qwen2_5_vl_7b_grpo_papo_no_kl_ref.sh
 ```
 
-#### **PAPO-D**
-```bash
-# 3B model
-cd PAPO
-bash examples/papo_dapo/qwen2_5_vl_3b_dapo_papo.sh
 
-# 7B model
-cd PAPO
-bash examples/papo_dapo/qwen2_5_vl_7b_dapo_papo.sh
-```
 
 ### **Pretrained Checkpoints**
 
