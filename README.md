@@ -160,11 +160,11 @@ bash examples/papo_dapo/qwen2_5_vl_7b_dapo_papo.sh
 
 #### **PAPO-G + No Reference KL (Config for Table 7 Results)**
 ```bash
-# 3B model (with double entropy loss)
+# 3B model
 cd PAPO
 bash examples/papo_grpo/qwen2_5_vl_3b_grpo_papo_no_kl_ref.sh
 
-# 7B model (with double entropy loss)
+# 7B model
 cd PAPO
 bash examples/papo_grpo/qwen2_5_vl_7b_grpo_papo_no_kl_ref.sh
 ```
