@@ -1,5 +1,6 @@
 [submodule "PAPO-Eval"]
 	path = PAPO-Eval
 	url = https://github.com/xhguo7/PAPO-Eval
+	branch = main
 [submodule "eval"]
 	branch = main
