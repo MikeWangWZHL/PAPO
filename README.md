@@ -1,6 +1,6 @@
 <div align="center">
 
-# **PAPO: Perception-Aware Policy Optimization for Multimodal Reasoning**
+# **PAPO: Perception-Aware Policy Optimization for Multimodal Reasoning (ICLR 2026)**
 
 </div>
 
@@ -17,6 +17,7 @@
 **PAPO**, a novel policy gradient algorithm that enhances multimodal reasoning through visually grounded optimization. PAPO can serve as a direct drop-in replacement for GRPO or DAPO without any additional assumptions.
 
 ## 🔥 News 
+- **Jan 2026:** PAPO is accepted to ICLR 2026
 - [x] **July 2025:** Released PAPO_G (GRPO) models
 - [x] **July 2025:** Released PAPO_G (GRPO) code
 - [x] **August 2025:** Released PAPO_D (DAPO) models
@@ -90,7 +91,14 @@ For MathVista and MathVerse, we filter out instances with free-form answers to e
 
 All results in the paper are average accurarcy @ 8 (repeating 8 times), with a temperature set to 1.0.
 
-## 🚀 **Quick Start**
+
+
+
+
+## 🚀 **Quick Start (Qwen2.5-VL)**
+
+### Update Support for Qwen3-VL 
+Please refer to the [main_qwen3 branch](https://github.com/MikeWangWZHL/PAPO/tree/main_qwen3) for instructions on running PAPO with Qwen3-VL.
 
 ### **Environment Setup**
 
@@ -200,6 +208,12 @@ bash papo_eval/run_infer.sh
 # Run model evaluation
 bash papo_eval/run_eval.sh
 ```
+
+### **Additional Implementation Notes on Entropy Losses**
+In theory, when enabling double entropy loss (adding `aug_entropy_loss` during the `workers/actor/dp_actor.py/update_policy`) we need to do an additional forward pass on the masked sequence to recompute the `aug_log_probs`. In practice, we find that whether doing this additional forward pass does not signiticantly affect the performance.
+Thus, by default in current implementation, we skipped the recomputation, which still empirically brings slight improvement over single entropy. Detailed discussion can be found in https://github.com/MikeWangWZHL/PAPO/issues/20.
+We also provide a switch `RECOMPUTE_AUG_LOG_PROBS` in `workers/actor/dp_actor.py` to turn on/off this recomputation if one requires the explicit impact on the graidents from the `aug_log_probs` (note that this will slow down training due to the additional forward pass). 
+
 
 ## 🥰 Acknowledgements
 

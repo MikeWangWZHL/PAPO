@@ -114,7 +114,16 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: KLController, kl_penalty="kl"):
     kld = compute_kl(data.batch["old_log_probs"], data.batch["ref_log_probs"], kl_penalty=kl_penalty)
     kld = kld * response_mask  # (batch_size, response_length)
 
-    data.batch["token_level_rewards"] = token_level_scores - kl_ctrl.kl_coef * kld
+    token_level_rewards = token_level_scores - kl_ctrl.kl_coef * kld
+    if "token_level_rewards" in data.batch:
+        data.batch.set_("token_level_rewards", token_level_rewards)
+    else:
+        was_locked = data.batch.is_locked
+        if was_locked:
+            data.batch.unlock_()
+        data.batch["token_level_rewards"] = token_level_rewards
+        if was_locked:
+            data.batch.lock_()
 
     current_kl = VF.masked_mean(kld, mask=response_mask, dim=-1)  # average over sequence
     current_kl = torch.mean(current_kl, dim=0).item()
@@ -141,7 +150,17 @@ def apply_kl_contrastive(
         data.batch["old_log_probs"], data.batch["aug_log_probs"], kl_penalty=kl_penalty_contrastive
     )
     kld_contrastive = kld_contrastive * response_mask
-    data.batch["token_level_rewards"] += kl_ctrl_contrastive.kl_coef * kld_contrastive # maximize
+    if "token_level_rewards" in data.batch:
+        current_rewards = data.batch["token_level_rewards"]
+        updated_rewards = current_rewards + kl_ctrl_contrastive.kl_coef * kld_contrastive
+        data.batch.set_("token_level_rewards", updated_rewards)
+    else:
+        was_locked = data.batch.is_locked
+        if was_locked:
+            data.batch.unlock_()
+        data.batch["token_level_rewards"] = kl_ctrl_contrastive.kl_coef * kld_contrastive
+        if was_locked:
+            data.batch.lock_()
     
     current_kl_contrastive = VF.masked_mean(kld_contrastive, mask=response_mask, dim=-1)
     current_kl_contrastive = torch.mean(current_kl_contrastive, dim=0).item()
@@ -178,8 +197,25 @@ def compute_advantage(data: DataProto, adv_estimator: AdvantageEstimator, gamma:
     else:
         raise NotImplementedError
 
-    data.batch["advantages"] = advantages
-    data.batch["returns"] = returns
+    if "advantages" in data.batch:
+        data.batch.set_("advantages", advantages)
+    else:
+        was_locked = data.batch.is_locked
+        if was_locked:
+            data.batch.unlock_()
+        data.batch["advantages"] = advantages
+        if was_locked:
+            data.batch.lock_()
+
+    if "returns" in data.batch:
+        data.batch.set_("returns", returns)
+    else:
+        was_locked = data.batch.is_locked
+        if was_locked:
+            data.batch.unlock_()
+        data.batch["returns"] = returns
+        if was_locked:
+            data.batch.lock_()
     return data
 
 
@@ -187,6 +223,19 @@ class RayPPOTrainer:
     """
     Note that this trainer runs on the driver process on a single CPU/GPU node.
     """
+
+    @staticmethod
+    def safe_set_tensordict(tensor_dict, key, value):
+        """Safely set a value in a potentially locked TensorDict."""
+        if key in tensor_dict:
+            tensor_dict.set_(key, value)
+        else:
+            was_locked = tensor_dict.is_locked
+            if was_locked:
+                tensor_dict.unlock_()
+            tensor_dict[key] = value
+            if was_locked:
+                tensor_dict.lock_()
 
     def __init__(
         self,
@@ -585,7 +634,7 @@ class RayPPOTrainer:
                 reward_baseline_tensor = reward_baseline_tensor.sum(dim=-1)
 
                 new_batch.pop(batch_keys=list(gen_baseline_output.batch.keys()))
-                new_batch.batch["reward_baselines"] = reward_baseline_tensor
+                RayPPOTrainer.safe_set_tensordict(new_batch.batch, "reward_baselines", reward_baseline_tensor)
                 del gen_baseline_batch, gen_baseline_output
 
             new_batch.non_tensor_batch["uid"] = np.array(
@@ -598,7 +647,7 @@ class RayPPOTrainer:
             # filter group
             if self.config.algorithm.online_filtering:
                 reward_tensor, reward_metrics = ray.get(self.reward_fn.compute_reward.remote(new_batch))
-                new_batch.batch["token_level_scores"] = reward_tensor
+                RayPPOTrainer.safe_set_tensordict(new_batch.batch, "token_level_scores", reward_tensor)
                 for k, v in reward_metrics.items():
                     all_metrics[k].extend(v)
                 filter_scores = reward_metrics[self.config.algorithm.filter_key]
@@ -735,7 +784,7 @@ class RayPPOTrainer:
                     if "token_level_scores" not in batch.batch:
                         # get token level scores asynchronously
                         reward_tensor, reward_metrics = ray.get(reward_ref)
-                        batch.batch["token_level_scores"] = reward_tensor
+                        RayPPOTrainer.safe_set_tensordict(batch.batch, "token_level_scores", reward_tensor)
                         reward_metrics = {f"reward/{k}": v for k, v in reduce_metrics(reward_metrics).items()}
                         metrics.update(reward_metrics)
 
@@ -745,7 +794,7 @@ class RayPPOTrainer:
                         batch, kl_metrics = apply_kl_penalty(batch, self.kl_ctrl, self.config.algorithm.kl_penalty)
                         metrics.update(kl_metrics)
                     else:
-                        batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+                        RayPPOTrainer.safe_set_tensordict(batch.batch, "token_level_rewards", batch.batch["token_level_scores"])
 
                     # compute advantages, executed on the driver process
                     batch = compute_advantage(

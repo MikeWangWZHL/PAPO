@@ -43,6 +43,8 @@ except ImportError:
 __all__ = ["DataParallelPPOActor"]
 
 
+RECOMPUTE_AUG_LOG_PROBS=False
+
 class DataParallelPPOActor(BasePPOActor):
     def __init__(
         self,
@@ -158,6 +160,22 @@ class DataParallelPPOActor(BasePPOActor):
 
         return log_probs
 
+    # for recompute aug log prob
+    def _forward_micro_batch_aug(self, micro_batch: Dict[str, torch.Tensor], temperature: float) -> torch.Tensor:
+        """
+        Forward pass with augmented multimodal inputs for computing aug_log_probs with gradients.
+        
+        Returns:
+            log_probs: # (bs, response_len)
+        """
+        # Create a copy of micro_batch and swap in augmented multi-modal inputs
+        model_inputs = micro_batch.copy()
+        if "aug_multi_modal_inputs" in model_inputs:
+            model_inputs["multi_modal_inputs"] = model_inputs.pop("aug_multi_modal_inputs")
+        
+        # Use the same forward logic as _forward_micro_batch
+        return self._forward_micro_batch(model_inputs, temperature=temperature)
+
     def _optimizer_step(self) -> torch.Tensor:
         if isinstance(self.actor_module, FSDP):
             grad_norm = self.actor_module.clip_grad_norm_(self.config.max_grad_norm)
@@ -222,9 +240,13 @@ class DataParallelPPOActor(BasePPOActor):
 
         # for contrastive kl
         if "aug_log_probs" in data.batch.keys() and self.config.use_kl_prcp:
-            select_keys.append("aug_log_probs")
+            if RECOMPUTE_AUG_LOG_PROBS:
+                non_tensor_select_keys.append("aug_multi_modal_inputs")
+            else:
+                select_keys.append("aug_log_probs")
             non_tensor_select_keys.append("kl_prcp_weighting")
             non_tensor_select_keys.append("kl_prcp_coef")
+            
         
         if self.config.use_sft_loss:
             non_tensor_select_keys.append("correctness_mult_mask")
@@ -265,6 +287,14 @@ class DataParallelPPOActor(BasePPOActor):
                     # all return: (bsz, response_length)
                     log_probs = self._forward_micro_batch(model_inputs, temperature=temperature)
                     entropy_loss = -VF.masked_mean(log_probs, response_mask)  # estimator of entropy loss
+                    
+                    # Recompute aug_log_probs if requring aug_entropy to be directly affecting gradients; By default RECOMPUTE_AUG_LOG_PROBS=False, we find this empirically works similarly while significantly saving computation
+                    aug_log_probs = None
+                    if RECOMPUTE_AUG_LOG_PROBS:
+                        if "aug_multi_modal_inputs" in model_inputs and self.config.use_kl_prcp:
+                            aug_log_probs = self._forward_micro_batch_aug(model_inputs, temperature=temperature)
+                    else:
+                        aug_log_probs = model_inputs.get("aug_log_probs", None)
 
                     pg_loss, pg_metrics = compute_policy_loss(
                         old_log_probs=old_log_probs,
@@ -292,8 +322,7 @@ class DataParallelPPOActor(BasePPOActor):
                     discount_ratio = 1.0 # for entropy losses; maybe updated by annealing kl_prcp settings
                     
                     # for kl_prcp
-                    if "aug_log_probs" in model_inputs:
-                        aug_log_probs = model_inputs["aug_log_probs"]
+                    if aug_log_probs is not None:
                         aug_entropy_loss = -VF.masked_mean(aug_log_probs, response_mask)  # estimator of entropy loss
                         
                         # compute kl_prcp

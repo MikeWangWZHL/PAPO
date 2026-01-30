@@ -92,7 +92,27 @@ def union_tensor_dict(tensor_dict1: TensorDict, tensor_dict2: TensorDict) -> Ten
         if key in tensor_dict1 and not torch.equal(tensor_dict1[key], tensor_dict2[key]):
             raise ValueError(f"Key already exists: {key}.")
 
-        tensor_dict1[key] = tensor_dict2[key]
+        # unlock tensordict
+        if key in tensor_dict1:
+            try:
+                tensor_dict1.set_(key, tensor_dict2[key])
+            except RuntimeError:
+                was_locked = tensor_dict1.is_locked
+                if was_locked:
+                    tensor_dict1.unlock_()
+                tensor_dict1[key] = tensor_dict2[key]
+                if was_locked:
+                    tensor_dict1.lock_()
+        else:
+            try:
+                tensor_dict1[key] = tensor_dict2[key]
+            except RuntimeError:
+                was_locked = tensor_dict1.is_locked
+                if was_locked:
+                    tensor_dict1.unlock_()
+                tensor_dict1[key] = tensor_dict2[key]
+                if was_locked:
+                    tensor_dict1.lock_()
 
     return tensor_dict1
 

@@ -528,6 +528,14 @@ class FSDPWorker(Worker):
         assert self._has_actor
 
         self._process_multi_modal_inputs(data)
+        
+        # Process augmented multimodal data if present for kl_prcp
+        if "aug_multi_modal_data" in data.non_tensor_batch:
+            self._process_aug_multi_modal_inputs(data)
+            data.non_tensor_batch["aug_multi_modal_inputs"] = data.non_tensor_batch.pop("multi_modal_inputs")  # augmented inputs
+            if "uid" in self._cache and np.all(data.non_tensor_batch["uid"] == self._cache["uid"]):
+                data.non_tensor_batch["multi_modal_inputs"] = self._cache["multi_modal_inputs"]  # original multi_modal_inputs
+        
         data = data.to(torch.cuda.current_device())
 
         if self._use_param_offload:
