@@ -18,7 +18,7 @@ A unified tracking interface that supports logging data to different backend
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
-
+import json
 import torch
 
 from ..py_functional import convert_dict_to_str, flatten_dict, is_package_available, unflatten_dict
@@ -58,6 +58,18 @@ class ConsoleLogger(Logger):
 
     def log(self, data: Dict[str, Any], step: int) -> None:
         print(f"Step {step}\n" + convert_dict_to_str(unflatten_dict(data)))
+
+class FileLogger(Logger):
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+        print(f"Initializing logging file to {config['trainer']['save_checkpoint_path']}.")
+        os.makedirs(config["trainer"]["save_checkpoint_path"], exist_ok=True)
+        with open(os.path.join(config["trainer"]["save_checkpoint_path"], "experiment_config.json"), "w") as f:
+            json.dump(config, f, indent=2)
+
+    def log(self, data: dict[str, Any], step: int) -> None:
+        with open(os.path.join(self.config["trainer"]["save_checkpoint_path"], "experiment_log.jsonl"), "a") as f:
+            f.write(json.dumps({"step": step, **unflatten_dict(data)}) + "\n")
 
 
 class MlflowLogger(Logger):
@@ -135,6 +147,7 @@ class WandbLogger(Logger):
 
 LOGGERS = {
     "console": ConsoleLogger,
+    "file": FileLogger,
     "mlflow": MlflowLogger,
     "swanlab": SwanlabLogger,
     "tensorboard": TensorBoardLogger,
@@ -154,7 +167,8 @@ class Tracker:
 
             self.loggers.append(LOGGERS[logger](config))
 
-        self.gen_logger = AggregateGenerationsLogger(loggers)
+        #self.gen_logger = AggregateGenerationsLogger(loggers)
+        self.gen_logger = AggregateGenerationsLogger(loggers, config)
 
     def log(self, data: Dict[str, Any], step: int) -> None:
         for logger in self.loggers:

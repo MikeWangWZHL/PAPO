@@ -31,7 +31,7 @@ from transformers import PreTrainedTokenizer, ProcessorMixin
 from huggingface_hub import HfApi
 from huggingface_hub import hf_hub_download
 
-from ..models.transformers.qwen2_vl import get_rope_index
+# from ..models.transformers.qwen2_vl import get_rope_index
 from . import torch_functional as VF
 
 
@@ -333,7 +333,7 @@ class RLHFDataset(Dataset):
     def __getitem__(self, index):
         example: dict = self.dataset[index]
         messages = self._build_messages(example)
-
+        example.pop(self.prompt_key, None)
         if self.image_key in example:
             prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
             images = example.pop(self.image_key)
@@ -387,7 +387,13 @@ class RLHFDataset(Dataset):
 
         if self.processor is not None and "Qwen2VLImageProcessor" in self.processor.image_processor.__class__.__name__:
             # qwen2vl mrope
-            position_ids = get_rope_index(
+             # qwen-vl mrope
+            if "Qwen3VLProcessor" in self.processor.__class__.__name__:
+                from ..models.transformers.qwen3_vl import get_rope_index
+            else:
+                from ..models.transformers.qwen2_vl import get_rope_index
+
+            vision_position_ids = get_rope_index(
                 self.processor,
                 input_ids=input_ids,
                 image_grid_thw=model_inputs.get("image_grid_thw", None),
@@ -395,6 +401,8 @@ class RLHFDataset(Dataset):
                 second_per_grid_ts=model_inputs.get("second_per_grid_ts", None),
                 attention_mask=attention_mask,
             )  # (3, seq_length)
+            text_position_ids = torch.arange(len(input_ids)).unsqueeze(0)
+            position_ids = torch.cat((text_position_ids, vision_position_ids), dim=0) # (4, seq_length)
         else:
             position_ids = torch.clip(attention_mask.cumsum(dim=0) - 1, min=0, max=None)  # (seq_length,)
 

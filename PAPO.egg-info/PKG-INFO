@@ -1,3 +1,78 @@
+Metadata-Version: 2.4
+Name: PAPO
+Version: 0.1.0
+Summary: Perception-Aware Policy Optimization for Multimodal Reasoning
+Home-page: https://github.com/MikeWangWZHL/PAPO
+Author: PAPO Team
+Author-email: team@papo.ai
+License: MIT
+Project-URL: Homepage, https://mikewangwzhl.github.io/PAPO/
+Project-URL: Repository, https://github.com/MikeWangWZHL/PAPO
+Project-URL: Documentation, https://github.com/MikeWangWZHL/PAPO/README.md
+Project-URL: Bug Tracker, https://github.com/MikeWangWZHL/PAPO/issues
+Keywords: ai,ml,deep-learning,transformers,llm
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: setuptools>=61.0
+Requires-Dist: wheel
+Requires-Dist: ninja
+Requires-Dist: packaging
+Requires-Dist: vllm==0.8.4
+Requires-Dist: accelerate
+Requires-Dist: datasets
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: peft
+Requires-Dist: pillow
+Requires-Dist: pyarrow>=15.0.0
+Requires-Dist: transformers==4.51.3
+Requires-Dist: omegaconf
+Requires-Dist: codetiming
+Requires-Dist: wandb
+Requires-Dist: tensorboard
+Requires-Dist: mathruler
+Requires-Dist: pylatexenc
+Requires-Dist: qwen-vl-utils
+Requires-Dist: tensordict
+Requires-Dist: torchdata
+Requires-Dist: torch==2.6.0
+Requires-Dist: torchvision
+Requires-Dist: torchaudio
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"
+Requires-Dist: black>=23.0; extra == "dev"
+Requires-Dist: isort>=5.0; extra == "dev"
+Requires-Dist: flake8>=6.0; extra == "dev"
+Requires-Dist: mypy>=1.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=5.0; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=1.0; extra == "docs"
+Requires-Dist: myst-parser>=0.18; extra == "docs"
+Provides-Extra: cuda-optimized
+Requires-Dist: flash-attn==2.7.4.post1; extra == "cuda-optimized"
+Requires-Dist: liger-kernel; extra == "cuda-optimized"
+Requires-Dist: flashinfer-python; extra == "cuda-optimized"
+Provides-Extra: all
+Requires-Dist: flash-attn==2.7.4.post1; extra == "all"
+Requires-Dist: liger-kernel; extra == "all"
+Requires-Dist: flashinfer-python; extra == "all"
+Dynamic: author-email
+Dynamic: home-page
+Dynamic: requires-python
+
 <div align="center">
 
 # **PAPO: Perception-Aware Policy Optimization for Multimodal Reasoning (ICLR 2026)**
@@ -134,8 +209,8 @@ pip install \
   torchdata==0.10.0 \
   --index-url https://download.pytorch.org/whl/cu128
 
-#upgrade flash-attn with 12.8 wheel. Add your python wheel
-pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiFALSE-cp312-cp312-linux_x86_64.whl
+#upgrade flash-attn with 12.8 wheel
+pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiFALSE-${PYTHON_WHEEL_VER}-linux_x86_64.whl
 
 pip install vllm==0.11.0
 ```
@@ -163,7 +238,7 @@ if you get paths, then the problem is solved.
 
 The main training pipeline is adopted from [EasyR1](https://github.com/hiyouga/EasyR1). We support `Qwen3-VL Thinking 2B`. Checkpoints for `Qwen3-VL Thinking 7B` coming soon.
 
-- **Qwen3-VL 2B:** We typically use 4 `80G H100` GPUs
+- **Qwen3-VL 3B:** We typically use 4 `80G H100` GPUs
 
 #### **GRPO Baseline**
 ```bash
@@ -171,9 +246,14 @@ The main training pipeline is adopted from [EasyR1](https://github.com/hiyouga/E
 cd PAPO
 bash examples/papo_grpo/qwen3_vl_2b_grpo.sh
 
+# # 7B model  
+# cd PAPO
+# bash examples/papo_grpo/qwen3_vl_8b_grpo.sh
+# ```
+
 #### **PAPO-G (Config for Table 1 Results)**
 ```bash
-# 2B model
+# 3B model
 cd PAPO
 bash examples/papo_grpo/qwen3_vl_2b_grpo_papo.sh
 ```

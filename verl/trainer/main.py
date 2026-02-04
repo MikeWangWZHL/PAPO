@@ -118,10 +118,13 @@ def main():
                 "VLLM_LOGGING_LEVEL": "WARN",
                 "TORCH_NCCL_AVOID_RECORD_STREAMS": "1",
                 "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:False",
-                "PYTHONUNBUFFERED": "1",
+                "CUDA_DEVICE_MAX_CONNECTIONS": "1",
+                "VLLM_ALLREDUCE_USE_SYMM_MEM": "0",
+                #"PYTHONUNBUFFERED": "1",
             }
         }
-        ray.init(runtime_env=runtime_env)
+        #ray.init(runtime_env=runtime_env)
+        ray.init(_temp_dir='/tmp/something_else') # fix Permission denied: '/tmp/ray/session_2026-01-27_14-21-23_949940_1604656/node_ip_address.json.lock'
 
     runner = Runner.remote()
     ray.get(runner.run.remote(ppo_config))

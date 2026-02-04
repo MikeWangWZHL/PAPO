@@ -92,13 +92,18 @@ class ActorConfig:
     """constant C in dual-clip PPO, clips when advantage < -C"""
     loss_avg_mode: str = "token"
     """loss average mode: `token`, `seq`"""
+    loss_type: str = "default"
+    """loss type: `default`, `gspo`, `cispo`"""
     ppo_epochs: int = 1
     """number of ppo epochs for each rollout batch"""
     padding_free: bool = True
     """use padding-free training"""
+    dynamic_batching: bool = True
+    """enable dynamic batching"""
     ulysses_size: int = 1
     """ulysses sequence parallel size"""
     use_torch_compile: bool = True
+    """enable torch compile"""
     model: ModelConfig = field(default_factory=ModelConfig)
     optim: OptimConfig = field(default_factory=OptimConfig)
     fsdp: FSDPConfig = field(default_factory=FSDPConfig)
@@ -143,5 +148,6 @@ class RefConfig:
     # below are auto keys
     micro_batch_size_per_device_for_experience: int = field(default=-1, init=False)
     padding_free: bool = field(default=False, init=False)
+    dynamic_batching: bool = field(default=False, init=False)
     ulysses_size: int = field(default=1, init=False)
     use_torch_compile: bool = field(default=True, init=False)

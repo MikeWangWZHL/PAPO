@@ -29,6 +29,7 @@ from ...protocol import DataProto
 from ...trainer.core_algos import average_loss, compute_kl, compute_policy_loss
 from ...utils import torch_functional as VF
 from ...utils.py_functional import append_to_dict
+from ...utils.seqlen_balancing import prepare_dynamic_batch, restore_dynamic_batch
 from ...utils.ulysses import gather_outputs_and_unpad, ulysses_pad_and_slice_inputs
 from .base import BasePPOActor
 from .config import ActorConfig
@@ -91,9 +92,10 @@ class DataParallelPPOActor(BasePPOActor):
                     multi_modal_inputs[key] = None
 
         if self.config.padding_free:
-            input_ids_rmpad, indices, *_ = unpad_input(
-                input_ids.unsqueeze(-1), attention_mask
-            )  # input_ids_rmpad (total_nnz, ...)
+            # input_ids_rmpad, indices, *_ = unpad_input(
+            #     input_ids.unsqueeze(-1), attention_mask
+            # )  # input_ids_rmpad (total_nnz, ...)
+            input_ids_rmpad, indices, *_ = unpad_input(input_ids.unsqueeze(-1), attention_mask)  # (total_nnz, 1)
             input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
 
             # unpad the position_ids to align the rotary
@@ -215,9 +217,17 @@ class DataParallelPPOActor(BasePPOActor):
         select_keys = ["responses", "input_ids", "attention_mask", "position_ids"]
         non_tensor_select_keys = ["multi_modal_inputs"]
 
-        micro_batches = data.select(select_keys, non_tensor_select_keys).split(
-            self.config.micro_batch_size_per_device_for_experience
-        )
+        # micro_batches = data.select(select_keys, non_tensor_select_keys).split(
+        #     self.config.micro_batch_size_per_device_for_experience
+        # )
+        data = data.select(select_keys, non_tensor_select_keys)
+        if self.config.dynamic_batching:
+            max_token_len = self.config.micro_batch_size_per_device_for_experience * data.batch["input_ids"].size(-1)
+            micro_batches, batch_idx_list = prepare_dynamic_batch(data, max_token_len=max_token_len)
+        else:
+            micro_batches = data.split(self.config.micro_batch_size_per_device_for_experience)
+
+
         log_probs_lst = []
         if self.rank == 0:
             micro_batches = tqdm(micro_batches, desc="Compute log probs", position=1)
@@ -228,6 +238,8 @@ class DataParallelPPOActor(BasePPOActor):
             log_probs_lst.append(log_probs)
 
         log_probs = torch.concat(log_probs_lst, dim=0)
+        if self.config.dynamic_batching:
+            log_probs = restore_dynamic_batch(log_probs, batch_idx_list)
         return log_probs
 
     def update_policy(self, data: DataProto) -> Dict[str, Any]:
@@ -261,10 +273,22 @@ class DataParallelPPOActor(BasePPOActor):
                 mini_batches = tqdm(mini_batches, desc="Train mini-batches", position=1)
 
             for mini_batch in mini_batches:
-                gradient_accumulation = (
-                    self.config.global_batch_size_per_device // self.config.micro_batch_size_per_device_for_update
-                )
-                micro_batches = mini_batch.split(self.config.micro_batch_size_per_device_for_update)
+                # gradient_accumulation = (
+                #     self.config.global_batch_size_per_device // self.config.micro_batch_size_per_device_for_update
+                # )
+                # micro_batches = mini_batch.split(self.config.micro_batch_size_per_device_for_update)
+                
+                response_length = mini_batch.batch["responses"].size(-1)
+                response_mask = mini_batch.batch["attention_mask"][:, -response_length:]
+                total_response_tokens = torch.sum(response_mask)
+
+                if self.config.dynamic_batching:
+                    max_input_len = mini_batch.batch["input_ids"].size(-1)
+                    max_token_len = self.config.micro_batch_size_per_device_for_update * max_input_len
+                    micro_batches, _ = prepare_dynamic_batch(mini_batch, max_token_len=max_token_len)
+                else:
+                    micro_batches = mini_batch.split(self.config.micro_batch_size_per_device_for_update)
+                
                 if self.rank == 0:
                     micro_batches = tqdm(micro_batches, desc="Update policy", position=2)
 
@@ -277,10 +301,13 @@ class DataParallelPPOActor(BasePPOActor):
                     correctness_mult_mask = micro_batch.non_tensor_batch.pop("correctness_mult_mask", None)
 
                     model_inputs = {**micro_batch.batch, **micro_batch.non_tensor_batch}
-                    responses = model_inputs["responses"]
-                    response_length = responses.size(1)
-                    attention_mask = model_inputs["attention_mask"]
-                    response_mask = attention_mask[:, -response_length:]
+                    # responses = model_inputs["responses"]
+                    #response_length = responses.size(1)
+                    #attention_mask = model_inputs["attention_mask"]
+                    #response_mask = attention_mask[:, -response_length:]
+                    response_length = model_inputs["responses"].size(-1)
+                    response_mask = model_inputs["attention_mask"][:, -response_length:]
+
                     old_log_probs = model_inputs["old_log_probs"]
                     advantages = model_inputs["advantages"]
 
@@ -304,6 +331,7 @@ class DataParallelPPOActor(BasePPOActor):
                         clip_ratio_low=self.config.clip_ratio_low,
                         clip_ratio_high=self.config.clip_ratio_high,
                         clip_ratio_dual=self.config.clip_ratio_dual,
+                        loss_type=self.config.loss_type,
                         loss_avg_mode=self.config.loss_avg_mode,
                     )
                     if self.config.use_kl_loss and "ref_log_probs" in model_inputs:
@@ -315,9 +343,12 @@ class DataParallelPPOActor(BasePPOActor):
                             kl_penalty=self.config.kl_penalty,
                         )
                         kl_loss = average_loss(kld, response_mask, mode=self.config.loss_avg_mode)
-                        pg_loss = pg_loss + kl_loss * self.config.kl_coef
+                        # pg_loss = pg_loss + kl_loss * self.config.kl_coef
+                        loss = pg_loss + kl_loss * self.config.kl_coef
                         metrics["actor/kl_loss"] = kl_loss.detach().item()
                         metrics["actor/kl_coef"] = self.config.kl_coef
+                    else:
+                        loss = pg_loss
 
                     discount_ratio = 1.0 # for entropy losses; maybe updated by annealing kl_prcp settings
                     
@@ -396,17 +427,19 @@ class DataParallelPPOActor(BasePPOActor):
                         # logging
                         metrics["actor/sft_loss"] = sft_loss.detach().item()
                         metrics["actor/sft_coef"] = sft_coef               
-
-                    loss = pg_loss / gradient_accumulation
+                    #loss = pg_loss / gradient_accumulation
+                    loss = loss * torch.sum(response_mask) / total_response_tokens
                     loss.backward()
 
-                    batch_metrics = {
-                        "actor/pg_loss": pg_loss.detach().item(),
-                        "actor/pg_clipfrac_higher": pg_metrics["pg_clipfrac_higher"],
-                        "actor/pg_clipfrac_lower": pg_metrics["pg_clipfrac_lower"],
-                        "actor/entropy_loss": pg_metrics["entropy_loss"],
-                        "actor/ppo_kl": pg_metrics["ppo_kl"],
-                    }
+                    # batch_metrics = {
+                    #     "actor/pg_loss": pg_loss.detach().item(),
+                    #     "actor/pg_clipfrac_higher": pg_metrics["pg_clipfrac_higher"],
+                    #     "actor/pg_clipfrac_lower": pg_metrics["pg_clipfrac_lower"],
+                    #     "actor/entropy_loss": pg_metrics["entropy_loss"],
+                    #     "actor/ppo_kl": pg_metrics["ppo_kl"],
+                    # }
+                    batch_metrics = {f"actor/{k}": v for k, v in pg_metrics.items()}
+                    batch_metrics["actor/pg_loss"] = pg_loss.detach().item()
                     append_to_dict(metrics, batch_metrics)
 
                 grad_norm = self._optimizer_step()
