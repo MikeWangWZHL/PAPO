@@ -173,7 +173,7 @@ bash examples/papo_grpo/qwen3_vl_2b_grpo.sh
 
 #### **PAPO-G (Config for Table 1 Results)**
 ```bash
-# 3B model
+# 2B model
 cd PAPO
 bash examples/papo_grpo/qwen3_vl_2b_grpo_papo.sh
 ```
