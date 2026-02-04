@@ -171,11 +171,6 @@ The main training pipeline is adopted from [EasyR1](https://github.com/hiyouga/E
 cd PAPO
 bash examples/papo_grpo/qwen3_vl_2b_grpo.sh
 
-# # 7B model  
-# cd PAPO
-# bash examples/papo_grpo/qwen3_vl_8b_grpo.sh
-# ```
-
 #### **PAPO-G (Config for Table 1 Results)**
 ```bash
 # 3B model
