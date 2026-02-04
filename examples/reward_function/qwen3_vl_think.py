@@ -19,7 +19,8 @@ from mathruler.grader import extract_boxed_content, grade_answer
 
 
 def format_reward(response: str) -> float:
-    pattern = re.compile(r"<think>.*</think>.*\\boxed\{.*\}.*", re.DOTALL)
+    # because the chat template has qwen3 thinking <think>
+    pattern = re.compile(r".*</think>.*\\boxed\{.*\}.*", re.DOTALL)
     format_match = re.fullmatch(pattern, response)
     return 1.0 if format_match else 0.0
 

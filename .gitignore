@@ -1,12 +1,14 @@
 __pycache__/
 *.pyc
 */wandb/*
+wandb/
 
 # Large datasets
 */datasets/*
 
 # Model outputs and checkpoints
 */checkpoints/*
+checkpoints/
 
 # Common large files
 *.ckpt

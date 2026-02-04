@@ -21,7 +21,7 @@ implement PPO
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import TYPE_CHECKING, Dict, Literal, Tuple
+from typing import TYPE_CHECKING, Dict, Literal, Tuple, Any
 
 import numpy as np
 import torch
@@ -101,6 +101,7 @@ class AdvantageEstimator(str, Enum):
     REMAX = "remax"
     RLOO = "rloo"
 
+ADV_ESTIMATOR_MAP: dict[str, Any] = {}
 
 def get_kl_controller(algorithm_config: "AlgorithmConfig") -> KLController:
     """Adapted from https://github.com/huggingface/trl/blob/v0.11.0/trl/trainer/ppo_trainer.py#L319"""
@@ -118,8 +119,21 @@ def get_kl_controller(algorithm_config: "AlgorithmConfig") -> KLController:
 
     return kl_ctrl
 
+def register_adv_estimator(name: AdvantageEstimator):
+    """Decorator to register a advantage estimator function with a given name."""
 
-@torch.no_grad()
+    def decorator(fn):
+        wrapped_fn = torch.no_grad()(fn)
+        ADV_ESTIMATOR_MAP[getattr(name, "value", name)] = wrapped_fn
+        return wrapped_fn
+
+    return decorator
+def compute_advantage_return(name: AdvantageEstimator, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute advantage and return for a given advantage estimator."""
+    return ADV_ESTIMATOR_MAP[getattr(name, "value", name)](**kwargs)
+
+#@torch.no_grad()
+@register_adv_estimator(AdvantageEstimator.GAE)
 def compute_gae_advantage_return(
     token_level_rewards: torch.Tensor,
     values: torch.Tensor,
@@ -148,13 +162,18 @@ def compute_gae_advantage_return(
             shape: (bs, response_length)
 
     """
+    nextvalues = 0
     lastgaelam = 0
     advantages_reversed = []
     gen_len = token_level_rewards.shape[-1]
     for t in reversed(range(gen_len)):
-        nextvalues = values[:, t + 1] if t < gen_len - 1 else 0.0
         delta = token_level_rewards[:, t] + gamma * nextvalues - values[:, t]
-        lastgaelam = delta + gamma * lam * lastgaelam
+        gaelam = delta + gamma * lam * lastgaelam
+
+        if response_mask[:, t]:  # skip values and TD-error on observation tokens
+            nextvalues = values[:, t]
+            lastgaelam = gaelam
+
         advantages_reversed.append(lastgaelam)
 
     advantages = torch.stack(advantages_reversed[::-1], dim=1)
@@ -164,7 +183,8 @@ def compute_gae_advantage_return(
 
 
 # NOTE(sgm): this implementation only consider outcome supervision, where the reward is a scalar.
-@torch.no_grad()
+#@torch.no_grad()
+@register_adv_estimator(AdvantageEstimator.GRPO)
 def compute_grpo_outcome_advantage(
     token_level_rewards: torch.Tensor, response_mask: torch.Tensor, index: torch.Tensor, eps: float = 1e-6
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -303,7 +323,8 @@ def compute_prpo_outcome_advantage(
     returns = scores.unsqueeze(-1) * response_mask
     return returns, returns
 
-@torch.no_grad()
+#@torch.no_grad()
+@register_adv_estimator(AdvantageEstimator.RLOO)
 def compute_rloo_outcome_advantage(
     token_level_rewards: torch.Tensor, response_mask: torch.Tensor, index: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -346,7 +367,8 @@ def compute_rloo_outcome_advantage(
     return returns, returns
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@register_adv_estimator(AdvantageEstimator.REINFORCE_PLUS_PLUS)
 def compute_reinforce_plus_plus_outcome_advantage(
     token_level_rewards: torch.Tensor, response_mask: torch.Tensor, gamma: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -379,7 +401,8 @@ def compute_reinforce_plus_plus_outcome_advantage(
     return advantages, returns
 
 
-@torch.no_grad()
+#@torch.no_grad()
+@register_adv_estimator(AdvantageEstimator.REMAX)
 def compute_remax_outcome_advantage(
     token_level_rewards: torch.Tensor, reward_baselines: torch.Tensor, response_mask: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -453,6 +476,7 @@ def compute_policy_loss(
     clip_ratio_low: float,
     clip_ratio_high: float,
     clip_ratio_dual: float,
+    loss_type: Literal["default"],
     loss_avg_mode: Literal["token", "seq"],
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
     """Compute the clipped policy objective and related metrics for PPO.
@@ -528,7 +552,7 @@ def compute_value_loss(
     response_mask: torch.Tensor,
     cliprange_value: float,
     loss_avg_mode: Literal["token", "seq"],
-) -> Tuple[torch.Tensor, float]:
+) -> Tuple[torch.Tensor, Dict[str, float]]:
     """Compute the value loss.
 
     Adapted from https://github.com/huggingface/trl/blob/v0.15.0/trl/trainer/ppo_trainer.py#L556
@@ -560,8 +584,13 @@ def compute_value_loss(
     vf_loss2 = torch.square(vpredclipped - returns)
     clipped_vf_losses = torch.max(vf_loss1, vf_loss2)  # clip if vf_loss1 < vf_loss2
     vf_loss = 0.5 * average_loss(clipped_vf_losses, response_mask, mode=loss_avg_mode)
-    vf_clipfrac = VF.masked_mean((vf_loss1 < vf_loss2).float(), response_mask).detach().item()
-    return vf_loss, vf_clipfrac
+    #vf_clipfrac = VF.masked_mean((vf_loss1 < vf_loss2).float(), response_mask).detach().item()
+    metrics = {
+        "vf_clipfrac": VF.masked_mean((vf_loss1 < vf_loss2).float(), response_mask).detach().item(),
+        "vpred_mean": VF.masked_mean(vpreds, response_mask).detach().item(),
+    }
+    return vf_loss, metrics
+    #return vf_loss, vf_clipfrac
 
 
 def compute_kl(

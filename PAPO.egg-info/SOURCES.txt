@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+setup.py
+PAPO.egg-info/PKG-INFO
+PAPO.egg-info/SOURCES.txt
+PAPO.egg-info/dependency_links.txt
+PAPO.egg-info/entry_points.txt
+PAPO.egg-info/not-zip-safe
+PAPO.egg-info/requires.txt
+PAPO.egg-info/top_level.txt

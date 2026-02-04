@@ -46,7 +46,7 @@ from ..workers.reward import FunctionRewardManager
 from . import core_algos
 from .config import PPOConfig
 from .core_algos import AdvantageEstimator, FixedKLController, KLController, compute_kl, get_kl_controller
-from .metrics import compute_data_metrics, compute_throughout_metrics, compute_timing_metrics, reduce_metrics
+from .metrics import compute_data_metrics, compute_length_metrics, compute_throughout_metrics, compute_timing_metrics, reduce_metrics
 
 from PIL import Image
 from ..utils.dataset import collate_fn
@@ -477,6 +477,7 @@ class RayPPOTrainer:
         # Lists to collect samples for the table
         sample_inputs, sample_outputs, sample_labels, sample_scores = [], [], [], []
         reward_metrics_lst = defaultdict(list)
+        length_metrics_lst = defaultdict(list)
         print("Start validation...")
         self.actor_rollout_ref_wg.prepare_rollout_engine()
         for batch_dict in self.val_dataloader:
@@ -516,13 +517,18 @@ class RayPPOTrainer:
             reward_tensor_lst.append(reward_tensor)
             for key, value in reward_metrics.items():
                 reward_metrics_lst[key].extend(value)
+            
+            for key, value in compute_length_metrics(test_batch).items():
+                length_metrics_lst[key].append(value)
 
         self.actor_rollout_ref_wg.release_rollout_engine()
         self._maybe_log_val_generations(sample_inputs, sample_outputs, sample_labels, sample_scores)
         self.val_reward_score = torch.cat(reward_tensor_lst, dim=0).sum(-1).mean().item()
         val_reward_metrics = {f"val/{key}_reward": value for key, value in reduce_metrics(reward_metrics_lst).items()}
+        val_length_metrics = {f"val_{key}": value for key, value in reduce_metrics(length_metrics_lst).items()}
         print("Finish validation.")
-        return {"val/reward_score": self.val_reward_score, **val_reward_metrics}
+        #return {"val/reward_score": self.val_reward_score, **val_reward_metrics}
+        return {"val/reward_score": self.val_reward_score, **val_reward_metrics, **val_length_metrics}
 
     def _balance_batch(self, batch: DataProto, metrics: Dict[str, Any], logging_prefix: str = "global_seqlen") -> None:
         """Reorder the data on single controller such that each dp rank gets similar total tokens"""
