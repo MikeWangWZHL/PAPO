@@ -163,7 +163,7 @@ if you get paths, then the problem is solved.
 
 The main training pipeline is adopted from [EasyR1](https://github.com/hiyouga/EasyR1). We support `Qwen3-VL Thinking 2B`. Checkpoints for `Qwen3-VL Thinking 7B` coming soon.
 
-- **Qwen3-VL 3B:** We typically use 4 `80G H100` GPUs
+- **Qwen3-VL 2B:** We typically use 4 `80G H100` GPUs
 
 #### **GRPO Baseline**
 ```bash
