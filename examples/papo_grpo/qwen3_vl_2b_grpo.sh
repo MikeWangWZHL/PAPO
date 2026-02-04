@@ -15,7 +15,7 @@ GLOBAL_BATCH_SIZE=128
 ROLLOUT_BATCH_SIZE=384
 VAL_BATCH_SIZE=512
 MAX_PROMPT_LENGTH=4096
-#CHECKPOINT_PATH=/shared/nas/data/m1/sstoica2/PAPO_copy/checkpoints/easy_r1/qwen3_vl_2b__grpo_thinking__fix_reward__ep2_rb384_gb128/global_step_75
+
 EXP_NAME="qwen3_vl_2b__grpo_thinking__fix_reward__DEBUG_ep${TOTAL_EPOCHES}_rb${ROLLOUT_BATCH_SIZE}_gb${GLOBAL_BATCH_SIZE}"
 
 CONGI_FILE="examples/configs/config_grpo.yaml"
